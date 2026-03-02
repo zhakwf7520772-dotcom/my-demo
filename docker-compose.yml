@@ -1,0 +1,68 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: my-demo-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: demo
+      MYSQL_USER: demo
+      MYSQL_PASSWORD: demo123
+      TZ: Asia/Shanghai
+    ports:
+      - "13306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./mysql:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -proot --silent"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 20s
+
+  redis:
+    image: redis:7
+    container_name: my-demo-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "16379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+  user_service:
+    profiles: ["full"]
+    build:
+      context: .
+      dockerfile: services/user_service/Dockerfile
+    container_name: my-demo-user-service
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      USER_SVC__GRPC__HOST: 0.0.0.0
+      USER_SVC__GRPC__PORT: 50051
+      USER_SVC__MYSQL__HOST: mysql
+      USER_SVC__MYSQL__PORT: 3306
+      USER_SVC__MYSQL__USER: root
+      USER_SVC__MYSQL__PASSWORD: root
+      USER_SVC__MYSQL__DATABASE: demo
+      USER_SVC__REDIS__HOST: redis
+      USER_SVC__REDIS__PORT: 6379
+      USER_SVC__CACHE__USER_TTL_SECONDS: 300
+    ports:
+      - "50051:50051"
+
+volumes:
+  mysql_data:
+  redis_data:
